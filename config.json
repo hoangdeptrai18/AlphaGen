@@ -1,0 +1,29 @@
+{
+  "iterations": 20,
+  "min_datafields": 3,
+  "operators": [
+    "Arithmetic",
+    "Mathematical",
+    "Statistical",
+    "Time-Series",
+    "Group",
+    "Vector"
+  ],
+  "groups": [
+    "market",
+    "sector",
+    "industry",
+    "subindustry",
+    "currency"
+  ],
+  "pnl_chart": {
+    "name": "pnl_chart.png",
+    "test": 252,
+    "color": {
+      "train": "#a0aec0",
+      "test": "#3182ce",
+      "secondary": "#e53e3e",
+      "tertiary": "#38a169"
+    }
+  }
+}

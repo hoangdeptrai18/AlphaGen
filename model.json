@@ -1,0 +1,16 @@
+{
+  "models": [
+    "deepseek/deepseek-v4-flash",
+    "google/gemini-2.5-flash-lite",
+    "tencent/hy3:free"
+  ],
+  "temperature": 1.0,
+  "structured_output": {
+    "schema_description": "Structured output for alpha expression refinement. Provide detailed analysis of the current alpha's weaknesses, a clear refinement strategy, and the improved alpha expression.",
+    "schema": {
+      "Analysis": "Analyze the current alpha expression performance. Identify which checks are failing (e.g., low Sharpe, high turnover, low fitness) and explain why the expression may be causing these issues.",
+      "Refinement Strategy": "Describe the specific changes you will make to the alpha expression and why these changes should improve the failing metrics. Be specific about which operators or data fields you are modifying.",
+      "Alpha Expression": "The refined alpha expression in FastExpr format. Must be a valid WorldQuant Brain alpha expression. Use semicolons to separate multi-line statements."
+    }
+  }
+}

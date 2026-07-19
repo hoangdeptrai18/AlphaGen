@@ -1,0 +1,18 @@
+{
+  "type": "REGULAR",
+  "regular": "-winsorize(ts_backfill(group_mean(ts_covariance(fscore_surface, snt1_d1_uptargetpercent, 220), 0.1, market), 390), std=1)",
+  "settings": {
+    "instrumentType": "EQUITY",
+    "region": "USA",
+    "universe": "TOP3000",
+    "delay": 1,
+    "decay": 4,
+    "neutralization": "INDUSTRY",
+    "truncation": 0.1,
+    "pasteurization": "ON",
+    "unitHandling": "VERIFY",
+    "nanHandling": "OFF",
+    "language": "FASTEXPR",
+    "visualization": false
+  }
+}

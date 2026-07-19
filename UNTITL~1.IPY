@@ -1,0 +1,37 @@
+{
+ "cells": [
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "f4f8a10a-3acc-4a83-945a-0cddcd5a262e",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "BRAIN_CREDENTIAL_EMAIL = \"hoangvup291@gmail.com\"\n",
+    "BRAIN_CREDENTIAL_PASSWORD = \"Hoang1234567890!\"\n",
+    "GEMINI_API_KEYS = "
+   ]
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "Python [conda env:base] *",
+   "language": "python",
+   "name": "conda-base-py"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.13.5"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 5
+}
