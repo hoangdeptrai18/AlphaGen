@@ -1,0 +1,151 @@
+1. EXPRESSION VALIDITY: The alpha expression must be valid WorldQuant Brain FastExpr syntax. Multi-statement expressions must use semicolons (;) as delimiters. The last statement (or the only statement) defines the final alpha value returned.
+
+2. DATA FIELD USAGE: Only use the data fields provided in the "Data Field Context" section. Do not invent data field names. Use the exact field IDs as given.
+
+3. OPERATOR USAGE: Only use operators listed in the provided Operators Context. Do not use Python built-ins (e.g., sum, max) directly — use their FastExpr equivalents (e.g., ts_sum, ts_max).
+
+4. NUMERICAL STABILITY: Avoid division by zero. When dividing by a data field that can be zero or NaN, use nan_mask or add a small constant. Avoid log of non-positive values.
+
+5. LOOK-AHEAD BIAS: Never use future data. ts_delay(x, d) with d > 0 is fine. ts_delay(x, -d) would introduce look-ahead bias and is forbidden.
+
+6. TURNOVER: If the alpha fails TURNOVER check, reduce the window length of time-series operators or apply additional smoothing (e.g., ts_mean over more days). Avoid operators that change rank drastically day-to-day.
+
+7. SHARPE RATIO: The effective threshold is |Sharpe| ≥ 1.25 — always take the ABSOLUTE VALUE of Sharpe when evaluating signal strength.
+
+   SIGNAL DIRECTION IS A TOGGLE — NOT A ONE-WAY OPERATION:
+   Adding or removing a "-" sign at the front of an expression FLIPS the signal direction and reverses the Sharpe sign.
+   This works in BOTH directions:
+
+   Case A — Sharpe is negative, no "-" prefix yet:
+   - Sharpe = -1.8, |Sharpe| = 1.8 ≥ 1.25 → signal is strong but wrong direction
+   - Fix: ADD "-" prefix → Sharpe becomes +1.8 ✓
+   - Example: `rank(ts_delta(close, 5))` gives -1.6 → `-rank(ts_delta(close, 5))` gives +1.6
+
+   Case B — Expression already HAS a "-" prefix, and |Sharpe| ≥ 1.25:
+   - The "-" was added previously (or was part of the original design)
+   - If Sharpe is still negative: REMOVE the "-" → this double-negation restores the original direction
+   - If Sharpe is positive but you want to explore the opposite direction: try REMOVING the "-"
+   - Example: `-rank(ts_delta(close, 5))` gives Sharpe = -0.8 → remove "-" → `rank(ts_delta(close, 5))` might give +0.8
+
+   The key insight: whenever |Sharpe| ≥ 1.25, the underlying signal is strong. The only question is WHICH DIRECTION.
+   Toggle the "-" sign to find the direction that gives POSITIVE Sharpe ≥ 1.25.
+
+   Complete decision table (evaluate BEFORE redesigning the expression):
+   - Sharpe > 0 AND |Sharpe| ≥ 1.25                    → ✓ Good direction, no change needed
+   - Sharpe < 0 AND |Sharpe| ≥ 1.25, no "-" prefix     → ADD "-" prefix to flip direction
+   - Sharpe < 0 AND |Sharpe| ≥ 1.25, has "-" prefix    → REMOVE "-" prefix to restore original direction
+   - |Sharpe| < 1.25 (either sign)                      → Signal is genuinely weak — improve with rank/group_rank/longer lookback
+
+8. FITNESS FORMULA: Fitness ∝ Sharpe × √Returns × 1/√max(Turnover, 0.125)
+   - Sharpe has the LARGEST and most direct impact (linear multiplier). Always prioritize improving Sharpe first.
+   - Returns boosts fitness via √Returns — increasing annual returns helps even if Sharpe stays the same.
+   - Turnover only matters if it is ABOVE 12.5% — reducing Turnover below 0.125 has ZERO further effect on fitness. Do not over-smooth just to reduce turnover.
+   - If Turnover > 12.5%: apply ts_decay_linear(x, d) or ts_mean(x, d) with d=5–10 to smooth the signal.
+   - If Sharpe < 1.25 (failing LOW_SHARPE): check absolute value first — if |Sharpe| ≥ 1.25, just negate the signal. Otherwise the signal is genuinely weak: use rank normalization, group neutralization, or longer lookback windows.
+   - If fitness is too low despite passing Sharpe and Returns: the alpha may be too correlated with existing library alphas. Try novel datafields or transformations.
+
+   THREE LEVERS TO IMPROVE FITNESS — use all three, not just turnover:
+
+   LEVER 1 — Improve Sharpe (strongest lever, linear effect on Fitness):
+   - Add group neutralization: group_neutralize(signal, sector) removes sector-level noise
+   - Add cross-sectional ranking: rank(signal) makes the signal more robust and uniform
+   - Switch to a better datafield: if current field has low signal, try a different category
+   - Adjust lookback: shorter window = more reactive (higher Sharpe if signal is clean);
+     longer window = more stable (higher Sharpe if signal is noisy)
+   - Combine two signals: rank(signal_A) + rank(signal_B) can improve Sharpe if they are uncorrelated
+
+   LEVER 2 — Increase Returns (square root effect, still significant):
+   - Returns = annualized mean PnL. Low returns often means the signal is too sector-neutral or
+     the position sizing is too conservative.
+   - Add a directional bias: combine with a broad market signal or a sector-momentum component
+   - Use a longer lookback that captures multi-week trends rather than daily noise
+   - Avoid excessive neutralization that kills both alpha AND returns (e.g. double-neutralizing)
+   - Try ts_mean(signal, 21) to capture monthly-horizon returns instead of daily noise
+
+   LEVER 3 — Reduce Turnover (only if Turnover > 12.5%):
+   - Apply ts_mean(signal, 5) or ts_decay_linear(signal, 10) to smooth daily flips
+   - Use a longer window in ts_delta or ts_rank to reduce day-to-day rank changes
+   - Add rank() as outer wrapper — normalized signals flip less than raw ones
+   - WARNING: over-smoothing kills Sharpe. Apply smoothing only until Turnover < 0.5,
+     then stop and focus on Levers 1 and 2.
+
+9. DO NOT OVER-FIT: The goal is to find a generalizable signal, not to fit the in-sample period. Prefer simpler, interpretable expressions over overly complex ones.
+
+10. NEUTRALIZATION AWARENESS: The alpha will be neutralized as specified in settings. Design the expression to have signal after neutralization — avoid expressions whose signal is entirely captured by the neutralization group.
+
+11. OUTPUT FORMAT: The "Alpha Expression" field must contain ONLY the alpha expression code, nothing else — no comments, no explanations, no markdown formatting.
+
+12. DATA COVERAGE: Many WorldQuant Brain data fields have low or sporadic coverage (frequent NaN values), especially fundamental and alternative data. When using such fields, always wrap them with ts_backfill() to fill missing values with the most recent valid observation. Use a lookback window of 10 to 20 days — short enough to avoid using stale data, long enough to meaningfully improve coverage. Recommended default: ts_backfill(x, 10). Do not use windows shorter than 5 days (too little fill) or longer than 60 days (data becomes too stale and introduces look-ahead-like bias).
+
+   CRITICAL — ts_backfill TYPE RESTRICTION: ts_backfill() ONLY works on MATRIX type fields. It does NOT support EVENT type fields and will cause a simulation error ("Operator ts_backfill does not support event inputs"). Check the field type in the Data Field Context section:
+   - If type = MATRIX → safe to use ts_backfill(field, 10)
+   - If type = EVENT → DO NOT use ts_backfill. Instead use ts_sum(field, window) or ts_count(field, window) to aggregate events over time.
+
+Example: instead of rank(fundamental_field), use rank(ts_backfill(fundamental_field, 10)).
+Example for EVENT fields: instead of ts_backfill(earnings_event, 10), use ts_sum(earnings_event, 20) to count events over 20 days.
+
+13. DATASET DIVERSITY — MANDATORY MULTI-FIELD REQUIREMENT:
+   Your alpha expression MUST use AT LEAST 2 different data fields (minimum 2, from different categories if possible).
+   Using only one data field (e.g., only stockrank, only volume, only eps) will be REJECTED.
+
+   WorldQuant Brain provides data across many categories. You are encouraged to COMBINE fields from different categories to create uncorrelated, novel signals:
+
+   - PRICE / TECHNICAL: close, open, high, low, volume, vwap, returns, adv (average daily volume), market cap
+   - FUNDAMENTAL: earnings per share (eps), revenue, book value, P/E ratio, debt, cash flow, ROE, ROA
+   - ANALYST / ESTIMATES: analyst price targets, earnings revisions, recommendation changes, earnings surprise
+   - SENTIMENT: sentiment scores derived from news and social media
+   - NEWS: news volume, news sentiment, earnings announcement proximity
+   - SOCIAL MEDIA: social media mention count, buzz score, Twitter/Reddit activity
+   - OWNERSHIP: institutional ownership %, short interest, insider trading activity
+   - OPTIONS: implied volatility, put/call ratio, option volume
+
+   Strategy: combine a SLOW signal (fundamental, analyst) with a FAST signal (price, sentiment) for better Sharpe.
+   Example: combine rank(ts_backfill(eps, 10)) with rank(ts_delta(close, 5)) to mix fundamental with momentum.
+   Example: subtract group_neutralize(rank(sentiment_field), sector) from rank(ts_mean(volume, 20)) for a sentiment-adjusted volume signal.
+
+   If you only have one data field available in the context, explicitly state in your Analysis that you are requesting a second field from a different category and incorporate it into your expression.
+
+   DATAFIELD SWITCHING RULE — MANDATORY:
+   If you added or changed a datafield in the previous iteration and Sharpe IMPROVED BY LESS THAN 0.15, that datafield is NOT contributing meaningfully.
+   → Do NOT keep using the same datafield. Switch to a completely different one from a different category.
+   → "Improvement" means: new |Sharpe| − old |Sharpe| ≥ 0.15. If this threshold is not met, the field is a dead end.
+
+   Tracking rule:
+   - After each iteration, note the Sharpe delta for each datafield change.
+   - If a field gave Δ|Sharpe| < 0.15 across 2 consecutive attempts, abandon it entirely and try a field from a different category.
+   - NEVER retry close, volume, returns, or vwap as the added field if any of them already failed to improve Sharpe by 0.15.
+   - Diversify aggressively: try fundamental fields (eps, book_to_price, roe), analyst fields (earnings_revision, target_price), or sentiment fields next.
+
+   Bad pattern (do NOT do this):
+   Iteration 1: add close → Sharpe 0.58 → 0.63 (Δ = 0.05, too small)
+   Iteration 2: add close again in different form → Sharpe 0.63 → 0.67 (Δ = 0.04, still too small)
+   → You wasted 2 iterations on the same dead-end field.
+
+   Good pattern:
+   Iteration 1: add close → Δ|Sharpe| = 0.05 → ABANDON close, switch category
+   Iteration 2: try eps (fundamental) → Δ|Sharpe| = 0.22 → KEEP, continue improving
+
+14. WEIGHT CONCENTRATION — MANDATORY:
+   The pipeline REJECTS any alpha with weight > 20%. WorldQuant BRAIN's hard limit is 10%. ALWAYS design expressions to pass the weight test.
+
+   Root causes and fixes:
+   (a) Low coverage → use ts_backfill(MATRIX_field, 10) to fill NaN gaps; for quarterly data use ts_backfill(field, 60)
+   (b) Outliers / skewed data → normalize with rank(), zscore(), group_rank(x, sector), or ts_scale(x, d)
+   (c) Too few stocks → ensure signal covers enough stocks by combining multiple data fields
+
+   Priority fix sequence (apply in order until weight passes):
+   1. rank(signal) — transforms to uniform distribution, best single fix
+   2. group_rank(signal, sector) or group_zscore(signal, industry) — sector-neutral balance
+   3. signed_power(rank(signal), 0.5) — soften extreme signal magnitudes
+      → If signed_power unavailable: use sign(x) * pow(abs(x), 0.5) as equivalent
+   4. ts_backfill(field, 10) for any MATRIX field with NaN gaps (NOT for EVENT fields)
+   5. ts_decay_linear(rank(signal), 5) — smooth day-to-day spikes
+
+   If the weight check shows value > 10%: your FIRST priority is to apply rank() or zscore() to the entire expression.
+   If weight > 20%: the expression will be REJECTED by the pipeline — never submit such expressions.
+
+   COMPLEXITY vs WEIGHT trade-off:
+   - MORE operators/datafields ≠ better alpha. Adding operators often INCREASES weight by narrowing valid-output stocks.
+   - If weight is failing AND expression has 4+ operators or 3+ datafields: REMOVE operators or REPLACE low-coverage datafields with simpler high-coverage ones (close, volume, returns) BEFORE trying to fix with rank/zscore.
+   - Prefer: rank(A - B) over rank(ts_zscore(ts_decay(group_rank(A, sector) - ts_backfill(B, 20), 5), 10))
+   - Simpler expressions generalize better, overfit less, and are easier to pass weight test.
